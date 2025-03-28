@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net"
 	"os"
 	"time"
@@ -16,7 +18,8 @@ const (
 	Kb = 1 << (10 * iota)
 	Mb
 	Gb
-	NETWORK = "tcp"
+	NETWORK    = "tcp"
+	bufferSize = 500
 )
 
 type StreamClient struct {
@@ -28,33 +31,47 @@ func NewStreamClient(address string) *StreamClient {
 }
 
 func (s *StreamClient) Stream(fname string) error {
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Printf("stream client err:%v\n", err)
+		}
+	}()
+
 	conn, err := net.Dial(NETWORK, s.addr)
 	if err != nil {
+		fmt.Printf("stream client err:%v\n", err)
 		panic(err)
 	}
+
+	defer conn.Close()
 
 	f, err := os.OpenFile(fname, os.O_RDONLY, 0666)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	defer conn.Close()
 
-	reader := bufio.NewReaderSize(f, 10*Kb)
-	buff := make([]byte, 2*Kb)
+	stat, err := f.Stat()
+	if err != nil {
+		return err
+	}
 
-	i := 0
+	if stat.Size() == 0 {
+		return fmt.Errorf("file is empty")
+	}
+	reader := bufio.NewReaderSize(f, bufferSize)
+	buff := make([]byte, 200)
+
+	i := 1
 	for {
 		n, err := reader.Read(buff)
-		if err != nil {
-			break
-		}
 		if n >= 1 {
-			data := model.Data{
+			data := &model.Data{
 				Id:    fname,
 				Part:  i,
 				Value: buff[:n],
 				Time:  time.Now(),
+				Total: float32(stat.Size() / int64(bufferSize*i)),
 			}
 			jsonData, err := json.Marshal(data)
 			if err != nil {
@@ -64,6 +81,12 @@ func (s *StreamClient) Stream(fname string) error {
 				return err
 			}
 			i++
+		}
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
 		}
 	}
 	return nil
@@ -77,8 +100,11 @@ func (s *StreamClient) send(data []byte, conn net.Conn) (int, error) {
 		return 0, err
 	}
 
-	buffer.Write(data)
-	n, err := conn.Write(buffer.Bytes())
+	n, err := buffer.Write(data)
+	if err != nil {
+		return 0, err
+	}
+	n, err = conn.Write(buffer.Bytes())
 	if err != nil {
 		return n, err
 	}

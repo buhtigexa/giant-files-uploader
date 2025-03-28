@@ -3,7 +3,6 @@ package cmd
 import (
 	"bugtigexa.giantfilesuploader.com/model"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -11,25 +10,44 @@ import (
 	"time"
 )
 
-const TO = 10 * time.Second
+const TO = 30 * time.Second
 
 type StreamServer struct {
-	sm *model.FileManager
+	sm      *model.FileManager
+	address string
 }
 
-func NewStreamServer() *StreamServer {
+func NewStreamServer(addr string) *StreamServer {
 	return &StreamServer{
-		sm: model.NewFileManager(),
+		sm:      model.NewFileManager(),
+		address: addr,
 	}
 }
 
-func (s *StreamServer) processStream(conn net.Conn) error {
+func (s *StreamServer) Start() {
 	defer func() {
 		if err := recover(); err != nil {
-			fmt.Println(err)
+			log.Printf(" Error while executing server: %v", err)
+			return
 		}
+
 	}()
 
+	listener, err := net.Listen("tcp", s.address)
+	if err != nil {
+		log.Fatalf("Error while starting server: %v", err)
+	}
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Fatalf("Error while accepting client: %v", err)
+		}
+		go s.processStream(conn)
+	}
+
+}
+
+func (s *StreamServer) processStream(conn net.Conn) error {
 	defer func() {
 		log.Printf("Closing connection to %s", conn.RemoteAddr())
 		conn.Close()
@@ -45,10 +63,6 @@ func (s *StreamServer) processStream(conn net.Conn) error {
 				return nil
 			}
 			return err
-		}
-
-		if size == 0 {
-			return nil
 		}
 
 		buff := make([]byte, size)
@@ -72,27 +86,4 @@ func (s *StreamServer) processStream(conn net.Conn) error {
 		}
 	}
 	return nil
-}
-
-func (s *StreamServer) Start() {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Printf(" Error while executing server: %v", err)
-			return
-		}
-
-	}()
-
-	listener, err := net.Listen("tcp", "127.0.0.1:8080")
-	if err != nil {
-		log.Fatalf("Error while starting server: %v", err)
-	}
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Fatalf("Error while accepting client: %v", err)
-		}
-		s.processStream(conn)
-	}
-
 }

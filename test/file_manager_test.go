@@ -33,9 +33,8 @@ func TestCreateDirectory(t *testing.T) {
 
 	fm := model.NewFileManager()
 	data := model.Data{
-		Id:    "1",
+		Id:    "bigfile",
 		Part:  2,
-		Name:  "bigfile1",
 		Value: []byte("this is a big file"),
 		Time:  time.Now(),
 	}
