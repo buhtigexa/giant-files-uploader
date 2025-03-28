@@ -9,5 +9,5 @@ func GetFileName(data Data) string {
 }
 
 func GetDirname(data Data) string {
-	return fmt.Sprintf("%s", data.Name)
+	return fmt.Sprintf("%s", data.Id)
 }

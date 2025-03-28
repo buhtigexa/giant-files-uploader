@@ -1,10 +1,11 @@
-package main
+package cmd
 
 import (
 	"bugtigexa.giantfilesuploader.com/model"
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 	"time"
@@ -29,7 +30,10 @@ func (s *StreamServer) processStream(conn net.Conn) error {
 		}
 	}()
 
-	defer conn.Close()
+	defer func() {
+		log.Printf("Closing connection to %s", conn.RemoteAddr())
+		conn.Close()
+	}()
 	for {
 		var size int64
 		conn.SetReadDeadline(time.Now().Add(TO))
@@ -59,7 +63,7 @@ func (s *StreamServer) processStream(conn net.Conn) error {
 			return err
 		}
 
-		// if Im here is because we could read from the conn . So reset the timeout
+		// if I'm here is because we could read from conn .
 		if n == 0 {
 			return nil
 		}
@@ -73,7 +77,7 @@ func (s *StreamServer) processStream(conn net.Conn) error {
 func (s *StreamServer) Start() {
 	defer func() {
 		if err := recover(); err != nil {
-			fmt.Printf("%v\n Se cago el server por un tema del puerto ", err)
+			log.Printf(" Error while executing server: %v", err)
 			return
 		}
 
@@ -81,12 +85,12 @@ func (s *StreamServer) Start() {
 
 	listener, err := net.Listen("tcp", "127.0.0.1:8080")
 	if err != nil {
-		panic(err)
+		log.Fatalf("Error while starting server: %v", err)
 	}
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			panic(err)
+			log.Fatalf("Error while accepting client: %v", err)
 		}
 		s.processStream(conn)
 	}
