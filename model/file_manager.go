@@ -1,8 +1,9 @@
 package model
 
 import (
+	"bugtigexa.giantfilesuploader.com/helpers"
 	"encoding/json"
-	"os"
+	"fmt"
 )
 
 type FileManager struct {
@@ -11,33 +12,27 @@ type FileManager struct {
 func NewFileManager() *FileManager {
 	return &FileManager{}
 }
+
 func (m *FileManager) Store(b []byte) (int, error) {
 	var data Data
 	if err := json.Unmarshal(b, &data); err != nil {
 		return 0, err
 	}
 
-	dir := GetDirname(data)
-	_, err := os.Stat(dir)
-	if os.IsNotExist(err) {
-		if err := os.Mkdir(dir, os.ModePerm); err != nil {
-			return 0, err
-		}
-	}
-
-	fname := GetFileName(data)
-	_, err = os.Stat(fname)
-	if !os.IsNotExist(err) {
-		return 0, nil
-	}
-	f, err := os.Create(fname)
+	obj, err := helpers.Decode(b)
 	if err != nil {
 		return 0, err
 	}
-	defer f.Close()
-	n, err := f.Write(b)
-	if err != nil {
-		return n, err
+
+	switch v := obj.(type) {
+	case Data:
+		data = v
+	default:
+		return 0, fmt.Errorf("unable to unmarshal json")
 	}
-	return n, nil
+	if _, err := data.Save(); err != nil {
+		return 0, err
+	}
+
+	return 0, nil
 }

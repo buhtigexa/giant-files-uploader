@@ -3,6 +3,7 @@ package cmd
 import (
 	"bugtigexa.giantfilesuploader.com/model"
 	"encoding/binary"
+	"encoding/json"
 	"io"
 	"log"
 	"net"
@@ -81,6 +82,12 @@ func (s *StreamServer) processStream(conn net.Conn) error {
 		if n == 0 {
 			return nil
 		}
+
+		var dd map[string]interface{}
+		if err := json.Unmarshal(buff, &dd); err != nil {
+			return err
+		}
+
 		if _, err := s.sm.Store(buff); err != nil {
 			return err
 		}
