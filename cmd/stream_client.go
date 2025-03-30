@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bufio"
-	"bugtigexa.giantfilesuploader.com/model"
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
@@ -24,10 +23,25 @@ const (
 
 type StreamClient struct {
 	addr string
+	conn net.Conn
 }
 
 func NewStreamClient(address string) *StreamClient {
-	return &StreamClient{address}
+	conn, err := net.Dial(NETWORK, address)
+	if err != nil {
+		fmt.Printf("stream client err:%v\n", err)
+		panic(err)
+	}
+
+	return &StreamClient{address, conn}
+
+}
+
+func (s *StreamClient) Close() error {
+	if s.conn != nil {
+		return s.conn.Close()
+	}
+	return nil
 }
 
 func (s *StreamClient) Stream(fname string) error {
@@ -36,14 +50,6 @@ func (s *StreamClient) Stream(fname string) error {
 			fmt.Printf("stream client err:%v\n", err)
 		}
 	}()
-
-	conn, err := net.Dial(NETWORK, s.addr)
-	if err != nil {
-		fmt.Printf("stream client err:%v\n", err)
-		panic(err)
-	}
-
-	defer conn.Close()
 
 	f, err := os.OpenFile(fname, os.O_RDONLY, 0666)
 	if err != nil {
@@ -66,18 +72,18 @@ func (s *StreamClient) Stream(fname string) error {
 	for {
 		n, err := reader.Read(buff)
 		if n >= 1 {
-			data := &model.Data{
-				Id:    fname,
-				Part:  i,
-				Value: buff[:n],
-				Time:  time.Now(),
-				Total: float32(stat.Size() / int64(bufferSize*i)),
+			data := &Data{
+				FileName: fname,
+				Part:     i,
+				Value:    buff[:n],
+				Time:     time.Now(),
+				Total:    float32(int64(n*i) / stat.Size()),
 			}
 			jsonData, err := json.Marshal(data)
 			if err != nil {
 				return err
 			}
-			if _, err = s.send(jsonData, conn); err != nil {
+			if _, err = s.send(jsonData, s.conn); err != nil {
 				return err
 			}
 			i++

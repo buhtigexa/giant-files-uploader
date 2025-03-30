@@ -1,31 +1,80 @@
 package cmd
 
 import (
-	"bugtigexa.giantfilesuploader.com/model"
+	"context"
+	"database/sql"
 	"encoding/binary"
-	"encoding/json"
+	"fmt"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"io"
+	"os"
+	"strconv"
+
 	"log"
 	"net"
-	"os"
 	"time"
 )
 
-const TO = 30 * time.Second
+var ErrDbConn error = fmt.Errorf("Unable to connect to database\n")
 
 type StreamServer struct {
-	sm      *model.FileManager
-	address string
+	readTimeOut time.Duration
+	sm          *FileManager
+	host        string
+	port        string
+	db          *DbConfig
 }
 
-func NewStreamServer(addr string) *StreamServer {
+func NewStreamServer(host, port string) *StreamServer {
+	b, err := strconv.ParseInt(os.Getenv("READ_TIME_OUT_CONNECTION"), 10, 64)
+	if err != nil {
+		log.Printf(err.Error())
+		b = 0
+	}
+
+	db, err := connectDb()
+	if err != nil {
+		log.Printf(err.Error())
+		return nil
+	}
 	return &StreamServer{
-		sm:      model.NewFileManager(),
-		address: addr,
+		readTimeOut: time.Duration(b),
+		sm:          NewFileManager(),
+		host:        host,
+		port:        port,
+		db:          db,
 	}
 }
 
-func (s *StreamServer) Start() {
+type DbConfig struct {
+	user   string
+	pass   string
+	host   string
+	port   string
+	dbName string
+	sqlDB  *sql.DB
+}
+
+func connectDb() (*DbConfig, error) {
+	dbConn := &DbConfig{}
+	if dbConn.user == "" || dbConn.pass == "" || dbConn.port == "" || dbConn.dbName == "" {
+		return dbConn, ErrDbConn
+	}
+
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", dbConn.user, dbConn.pass, dbConn.host, dbConn.port, dbConn.dbName)
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return nil, err
+	}
+	err = db.Ping()
+	if err != nil {
+		return nil, err
+	}
+	dbConn.sqlDB = db
+	return dbConn, nil
+}
+
+func (s *StreamServer) Start(ctx context.Context) {
 	defer func() {
 		if err := recover(); err != nil {
 			log.Printf(" Error while executing server: %v", err)
@@ -34,18 +83,31 @@ func (s *StreamServer) Start() {
 
 	}()
 
-	listener, err := net.Listen("tcp", s.address)
+	listener, err := net.Listen("tcp", s.host+":"+s.port)
 	if err != nil {
 		log.Fatalf("Error while starting server: %v", err)
 	}
+
+	go func() {
+		<-ctx.Done()
+		listener.Close()
+	}()
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Fatalf("Error while accepting client: %v", err)
+			select {
+			case <-ctx.Done():
+				return
+			default:
+
+				if err != nil {
+					log.Fatalf("Error while accepting client: %v", err)
+				}
+			}
 		}
 		go s.processStream(conn)
 	}
-
 }
 
 func (s *StreamServer) processStream(conn net.Conn) error {
@@ -55,7 +117,7 @@ func (s *StreamServer) processStream(conn net.Conn) error {
 	}()
 	for {
 		var size int64
-		conn.SetReadDeadline(time.Now().Add(TO))
+		conn.SetReadDeadline(time.Now().Add(s.readTimeOut * time.Second))
 		if err := binary.Read(conn, binary.BigEndian, &size); err != nil {
 			if os.IsTimeout(err) {
 				return err
@@ -81,11 +143,6 @@ func (s *StreamServer) processStream(conn net.Conn) error {
 		// if I'm here is because we could read from conn .
 		if n == 0 {
 			return nil
-		}
-
-		var dd map[string]interface{}
-		if err := json.Unmarshal(buff, &dd); err != nil {
-			return err
 		}
 
 		if _, err := s.sm.Store(buff); err != nil {

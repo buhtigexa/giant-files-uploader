@@ -1,4 +1,4 @@
-package model
+package cmd
 
 import (
 	"encoding/json"
@@ -8,11 +8,11 @@ import (
 )
 
 type Data struct {
-	Id    string    `json:"id"`
-	Part  int       `json:"part"`
-	Value []byte    `json:"value"`
-	Time  time.Time `json:"time"`
-	Total float32   `json:"total"`
+	FileName string    `json:"id"`
+	Part     int       `json:"part"`
+	Value    []byte    `json:"value"`
+	Time     time.Time `json:"time"`
+	Total    float32   `json:"total,omitempty"`
 }
 
 func (data *Data) MarshalJSON() ([]byte, error) {
@@ -22,9 +22,9 @@ func (data *Data) MarshalJSON() ([]byte, error) {
 		Part  int     `json:"part"`
 		Value []byte  `json:"value"`
 		Time  int64   `json:"time"`
-		Total float32 `json:"total"`
+		Total float32 `json:"total,omitempty"`
 	}{
-		Id:    data.Id,
+		Id:    data.FileName,
 		Part:  data.Part,
 		Value: data.Value,
 		Time:  uxtime,
@@ -40,14 +40,14 @@ func (data *Data) UnmarshalJSON(b []byte) error {
 		Part  int     `json:"part"`
 		Value []byte  `json:"value"`
 		Time  int64   `json:"time"`
-		Total float32 `json:"total"`
+		Total float32 `json:"total,omitempty"`
 	}
 
 	err := json.Unmarshal(b, &aux)
 	if err != nil {
 		return err
 	}
-	data.Id = aux.Id
+	data.FileName = aux.Id
 	data.Part = aux.Part
 	data.Value = aux.Value
 	data.Time = time.Unix(aux.Time, 0).UTC()
@@ -78,10 +78,18 @@ func (d *Data) Save() (int, error) {
 	return n, err
 }
 
+func (d *Data) toDataEntity() DataEntity {
+	return DataEntity{
+		FileName: d.FileName,
+		Total:    d.Total,
+		Time:     d.Time.UTC().Unix(),
+	}
+}
+
 func (d Data) GetFileName() string {
-	return fmt.Sprintf("%s/%s-%d-%d", d.GetDirname(), d.Id, d.Part, d.Time.UTC().Unix())
+	return fmt.Sprintf("%s/%s-%d-%d", d.GetDirname(), d.FileName, d.Part, d.Time.UTC().Unix())
 }
 
 func (d Data) GetDirname() string {
-	return fmt.Sprintf("%s", d.Id)
+	return fmt.Sprintf("%s", d.FileName)
 }

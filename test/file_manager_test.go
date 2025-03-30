@@ -1,7 +1,7 @@
 package test
 
 import (
-	"bugtigexa.giantfilesuploader.com/model"
+	"bugtigexa.giantfilesuploader.com/cmd"
 	"encoding/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,14 +31,14 @@ func TestCreateDirectory(t *testing.T) {
 		}
 	}
 
-	fm := model.NewFileManager()
-	data := model.Data{
-		Id:    "bigfile",
-		Part:  2,
-		Value: []byte("this is a big file"),
-		Time:  time.Now(),
+	fm := cmd.NewFileManager()
+	data := cmd.Data{
+		FileName: "bigfile",
+		Part:     2,
+		Value:    []byte("this is a big file"),
+		Time:     time.Now(),
 	}
-	dirname := model.GetDirname(data)
+	dirname := data.GetDirname()
 	defer clean(dirname)
 
 	by, err := json.Marshal(&data)
@@ -51,7 +51,7 @@ func TestCreateDirectory(t *testing.T) {
 	finfo, err := os.Stat(dirname)
 	require.Nil(t, err)
 	assert.True(t, finfo.IsDir())
-	fileName := model.GetFileName(data)
+	fileName := data.GetFileName()
 	finfo, err = os.Stat(fileName)
 	require.Nil(t, err)
 	assert.False(t, finfo.IsDir())

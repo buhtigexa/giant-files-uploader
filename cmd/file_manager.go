@@ -1,7 +1,6 @@
-package model
+package cmd
 
 import (
-	"bugtigexa.giantfilesuploader.com/helpers"
 	"encoding/json"
 	"fmt"
 )
@@ -14,25 +13,26 @@ func NewFileManager() *FileManager {
 }
 
 func (m *FileManager) Store(b []byte) (int, error) {
-	var data Data
-	if err := json.Unmarshal(b, &data); err != nil {
-		return 0, err
-	}
-
-	obj, err := helpers.Decode(b)
+	obj, err := Decode(b)
 	if err != nil {
 		return 0, err
 	}
 
 	switch v := obj.(type) {
-	case Data:
-		data = v
+	case *Data:
+		n, err := v.Save()
+		if err != nil {
+			return 0, err
+		}
+		return n, err
 	default:
 		return 0, fmt.Errorf("unable to unmarshal json")
 	}
-	if _, err := data.Save(); err != nil {
-		return 0, err
-	}
 
 	return 0, nil
+}
+
+func Decode(b []byte) (obj interface{}, err error) {
+	json.Unmarshal(b, &obj)
+	return obj, nil
 }
